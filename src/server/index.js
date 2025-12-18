@@ -10,7 +10,7 @@ import config from '../config/config.js';
 import tokenManager from '../auth/token_manager.js';
 import adminRouter from '../routes/admin.js';
 import sdRouter from '../routes/sd.js';
-import memoryManager, { MemoryPressure, registerMemoryPoolCleanup } from '../utils/memoryManager.js';
+import memoryManager, { registerMemoryPoolCleanup } from '../utils/memoryManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,10 +153,10 @@ const createStreamChunk = (id, created, model, delta, finish_reason = null) => {
 const writeStreamData = (res, data) => {
   const json = JSON.stringify(data);
   // 释放对象回池
-                const delta = { reasoning_content: data.reasoning_content };
-                if (data.thoughtSignature) {
-                  delta.thoughtSignature = data.thoughtSignature;
-                }
+  const delta = { reasoning_content: data.reasoning_content };
+  if (data.thoughtSignature) {
+    delta.thoughtSignature = data.thoughtSignature;
+  }
   res.write(SSE_PREFIX);
   res.write(json);
   res.write(SSE_SUFFIX);
