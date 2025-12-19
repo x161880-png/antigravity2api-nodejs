@@ -68,11 +68,17 @@ const DEFAULT_SYSTEM_INSTRUCTION = '你是聊天机器人，名字叫萌萌，�
 
 // 确保 .env 存在（如果缺失则创建带默认配置的文件）
 if (!fs.existsSync(envPath)) {
-  const defaultEnvContent = `# 环境变量配置文件
-# 参考 .env.example 了解可用配置项
+  const defaultEnvContent = `# 敏感配置（只在 .env 中配置）
+# 如果不配置以下三项，系统会自动生成随机凭据并在启动时显示
+# API_KEY=your-api-key
+# ADMIN_USERNAME=your-username
+# ADMIN_PASSWORD=your-password
+# JWT_SECRET=your-jwt-secret
 
-# 系统提示词（萌萌人设）
+# 可选配置
+# PROXY=http://127.0.0.1:7890
 SYSTEM_INSTRUCTION=${DEFAULT_SYSTEM_INSTRUCTION}
+# IMAGE_BASE_URL=http://your-domain.com
 `;
   fs.writeFileSync(envPath, defaultEnvContent, 'utf8');
   log.info('✓ 已创建 .env 文件，包含默认萌萌系统提示词');
