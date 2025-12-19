@@ -19,6 +19,9 @@ async function loadTokens() {
     }
 }
 
+// 正在刷新的 Token 集合
+const refreshingTokens = new Set();
+
 function renderTokens(tokens) {
     cachedTokens = tokens;
     
@@ -38,14 +41,23 @@ function renderTokens(tokens) {
         return;
     }
     
+    // 收集需要自动刷新的过期 Token
+    const expiredTokensToRefresh = [];
+    
     tokenList.innerHTML = tokens.map(token => {
         const expireTime = new Date(token.timestamp + token.expires_in * 1000);
         const isExpired = expireTime < new Date();
+        const isRefreshing = refreshingTokens.has(token.refresh_token);
         const expireStr = expireTime.toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
         const cardId = token.refresh_token.substring(0, 8);
         
+        // 如果已过期且启用状态，加入待刷新列表
+        if (isExpired && token.enable && !isRefreshing) {
+            expiredTokensToRefresh.push(token.refresh_token);
+        }
+        
         return `
-        <div class="token-card ${!token.enable ? 'disabled' : ''} ${isExpired ? 'expired' : ''}">
+        <div class="token-card ${!token.enable ? 'disabled' : ''} ${isExpired ? 'expired' : ''} ${isRefreshing ? 'refreshing' : ''}" id="card-${cardId}">
             <div class="token-header">
                 <span class="status ${token.enable ? 'enabled' : 'disabled'}">
                     ${token.enable ? '✅ 启用' : '❌ 禁用'}
@@ -70,9 +82,9 @@ function renderTokens(tokens) {
                     <span class="info-value sensitive-info">${token.email || '点击设置'}</span>
                     <span class="info-edit-icon">✏️</span>
                 </div>
-                <div class="info-row ${isExpired ? 'expired-text' : ''}">
+                <div class="info-row ${isExpired ? 'expired-text' : ''}" id="expire-row-${cardId}">
                     <span class="info-label">⏰</span>
-                    <span class="info-value">${expireStr}${isExpired ? ' (已过期)' : ''}</span>
+                    <span class="info-value">${isRefreshing ? '🔄 刷新中...' : expireStr}${isExpired && !isRefreshing ? ' (已过期)' : ''}</span>
                 </div>
             </div>
             <div class="token-quota-inline" id="quota-inline-${cardId}">
@@ -97,6 +109,63 @@ function renderTokens(tokens) {
     });
     
     updateSensitiveInfoDisplay();
+    
+    // 自动刷新过期的 Token
+    if (expiredTokensToRefresh.length > 0) {
+        expiredTokensToRefresh.forEach(refreshToken => {
+            autoRefreshToken(refreshToken);
+        });
+    }
+}
+
+// 自动刷新过期 Token
+async function autoRefreshToken(refreshToken) {
+    if (refreshingTokens.has(refreshToken)) return;
+    
+    refreshingTokens.add(refreshToken);
+    const cardId = refreshToken.substring(0, 8);
+    
+    // 更新 UI 显示刷新中状态
+    const card = document.getElementById(`card-${cardId}`);
+    const expireRow = document.getElementById(`expire-row-${cardId}`);
+    if (card) card.classList.add('refreshing');
+    if (expireRow) {
+        const valueSpan = expireRow.querySelector('.info-value');
+        if (valueSpan) valueSpan.textContent = '🔄 刷新中...';
+    }
+    
+    try {
+        const response = await authFetch(`/admin/tokens/${encodeURIComponent(refreshToken)}/refresh`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showToast('Token 已自动刷新', 'success');
+            // 刷新成功后重新加载列表
+            refreshingTokens.delete(refreshToken);
+            loadTokens();
+        } else {
+            showToast(`Token 刷新失败: ${data.message || '未知错误'}`, 'error');
+            refreshingTokens.delete(refreshToken);
+            // 更新 UI 显示刷新失败
+            if (expireRow) {
+                const valueSpan = expireRow.querySelector('.info-value');
+                if (valueSpan) valueSpan.textContent = '❌ 刷新失败';
+            }
+        }
+    } catch (error) {
+        if (error.message !== 'Unauthorized') {
+            showToast(`Token 刷新失败: ${error.message}`, 'error');
+        }
+        refreshingTokens.delete(refreshToken);
+        // 更新 UI 显示刷新失败
+        if (expireRow) {
+            const valueSpan = expireRow.querySelector('.info-value');
+            if (valueSpan) valueSpan.textContent = '❌ 刷新失败';
+        }
+    }
 }
 
 function showManualModal() {
